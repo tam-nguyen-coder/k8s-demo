@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-deployment
+spec:
+  replicas: 2 # Yêu cầu: Luôn có 2 bản sao (Pod) của ứng dụng này chạy
+  selector:
+    matchLabels:
+      app: hello-app
+  template:
+    metadata:
+      labels:
+        app: hello-app # Gắn nhãn cho các Pod để Service có thể tìm thấy
+    spec:
+      containers:
+      - name: web-server
+        image: nginxdemos/hello # Sử dụng một image có sẵn để demo
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-service
+spec:
+  selector:
+    app: hello-app # Tìm và gom nhóm các Pod có nhãn 'app: hello-app'
+  ports:
+    - protocol: TCP
+      port: 80 # Service sẽ nhận traffic ở cổng 80...
+      targetPort: 80 # ...và chuyển tiếp đến cổng 80 của Pod
