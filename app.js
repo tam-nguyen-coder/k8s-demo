@@ -2,11 +2,20 @@ const express = require('express');
 const app = express();
 const PORT = 3000;
 
+// Đọc cấu hình từ biến môi trường
+const apiUrl = process.env.API_URL || 'No API URL set';
+const apiKey = process.env.API_KEY || 'No API Key set';
+
 app.get('/', (req, res) => {
   res.json({
     message: "Hello from my own backend app!",
     hostname: req.hostname,
-    podName: process.env.HOSTNAME // Lấy tên Pod từ biến môi trường
+    podName: process.env.HOSTNAME,
+    // Trả về cấu hình đã đọc được
+    config: {
+      apiUrl: apiUrl,
+      apiKey: apiKey
+    }
   });
 });
 

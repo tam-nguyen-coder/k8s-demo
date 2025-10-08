@@ -14,9 +14,14 @@ spec:
     spec:
       containers:
       - name: web-server
-        image: tamnguyencoder/my-backend-app:v2
+        image: tamnguyencoder/my-backend-app:v3
         ports:
         - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: app-config # Lấy tất cả key từ ConfigMap 'app-config'
+        secretRef:
+            name: app-secret # Lấy tất cả key từ Secret 'app-secret'
 ---
 apiVersion: v1
 kind: Service
