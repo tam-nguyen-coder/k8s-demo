@@ -20,7 +20,7 @@ spec:
         envFrom:
         - configMapRef:
             name: app-config # Lấy tất cả key từ ConfigMap 'app-config'
-        secretRef:
+        - secretRef:
             name: app-secret # Lấy tất cả key từ Secret 'app-secret'
 ---
 apiVersion: v1
