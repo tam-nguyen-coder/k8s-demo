@@ -14,9 +14,9 @@ spec:
     spec:
       containers:
       - name: web-server
-        image: nginxdemos/hello # Sử dụng một image có sẵn để demo
+        image: tamnguyencoder/my-backend-app:v1
         ports:
-        - containerPort: 80
+        - containerPort: 3000
 ---
 apiVersion: v1
 kind: Service
@@ -28,4 +28,4 @@ spec:
   ports:
     - protocol: TCP
       port: 80 # Service sẽ nhận traffic ở cổng 80...
-      targetPort: 80 # ...và chuyển tiếp đến cổng 80 của Pod
+      targetPort: 3000 # Service sẽ chuyển tiếp đến cổng 3000 của Pod
