@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce # Yêu cầu ổ cứng có thể đọc-ghi bởi một node duy nhất
+  storageClassName: "microk8s-hostpath" # Loại lưu trữ mặc định của MicroK8s
+  resources:
+    requests:
+      storage: 1Gi # Yêu cầu dung lượng 1 Gigabyte
+      

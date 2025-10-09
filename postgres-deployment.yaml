@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine # Sử dụng image PostgreSQL chính thức
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: postgres-secret # Lấy biến môi trường từ Secret đã tạo
+          volumeMounts:
+            - name: postgres-storage # Tên của volume mount
+              # "Cắm" ổ cứng vào thư mục data mặc định của Postgres
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-storage # Định nghĩa "ổ cứng" cho Pod này
+          persistentVolumeClaim:
+            # Sử dụng "phiếu yêu cầu" mà chúng ta đã tạo
+            claimName: postgres-pvc
