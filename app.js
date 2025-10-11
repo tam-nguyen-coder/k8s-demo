@@ -8,7 +8,7 @@ const apiKey = process.env.API_KEY || 'No API Key set';
 
 app.get('/', (req, res) => {
   res.json({
-    message: "Hello from my CI/CD pipeline!",
+    message: "Hello from my CI/CD pipeline V2!",
     hostname: req.hostname,
     podName: process.env.HOSTNAME,
     // Trả về cấu hình đã đọc được
