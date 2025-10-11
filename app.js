@@ -8,7 +8,7 @@ const apiKey = process.env.API_KEY || 'No API Key set';
 
 app.get('/', (req, res) => {
   res.json({
-    message: "Hello from my own backend app!",
+    message: "Hello from my CI/CD pipeline!",
     hostname: req.hostname,
     podName: process.env.HOSTNAME,
     // Trả về cấu hình đã đọc được
