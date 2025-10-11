@@ -1,52 +1,62 @@
-name: Debug SSH Connection
+name: Deploy to Kubernetes
 
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  debug-ssh:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # Bước 1: Lấy code để workflow có thể chạy
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Bước 2: Cài đặt Cloudflared
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push Docker image
+      id: build_image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/my-backend-app:${{ github.sha }}
+
     - name: Install cloudflared
       run: |
         curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
         sudo dpkg -i cloudflared.deb
 
-    # Bước 3: Tạo file xác thực cloudflared
     - name: Create cloudflared certificate
       run: |
         mkdir -p ~/.cloudflared/
         echo "${{ secrets.CLOUDFLARE_CERT }}" > ~/.cloudflared/cert.pem
-
-    # Bước 4: Tạo file cấu hình SSH
+        
     - name: Create SSH config
       run: |
         mkdir -p ~/.ssh
         echo "Host ${{ secrets.K8S_HOST }}" > ~/.ssh/config
         echo "  ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h" >> ~/.ssh/config
+        # === THÊM 2 DÒNG NÀY ĐỂ SỬA LỖI ===
+        echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+        echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
 
-    # Bước 5: Kiểm tra các file đã được tạo đúng chưa
-    - name: Verify Created Files
-      run: |
-        echo "--- Verifying cloudflared certificate file ---"
-        ls -la ~/.cloudflared/
-        # Kiểm tra xem file cert có nội dung không
-        head -n 2 ~/.cloudflared/cert.pem 
-        echo ""
-        echo "--- Verifying SSH config file ---"
-        cat ~/.ssh/config
-        
-    # Bước 6: Chạy SSH với chế độ hiển thị chi tiết (Verbose)
-    - name: Test SSH Connection with Verbose Output
-      # Action này chỉ dùng để load key và password vào môi trường
-      uses: webfactory/ssh-agent@v0.9.0
+    - name: Deploy to Kubernetes
+      uses: appleboy/ssh-action@master
       with:
-        ssh-private-key: ${{ secrets.K8S_PRIVATE_KEY }}
-    - run: ssh -v ${{ secrets.K8S_USER }}@${{ secrets.K8S_HOST }} "echo 'SSH Connection successful!'"
+        host: ${{ secrets.K8S_HOST }}
+        username: ${{ secrets.K8S_USER }}
+        key: ${{ secrets.K8S_PRIVATE_KEY }}
+        password: ${{ secrets.K8S_PASSWORD }} # Giữ lại dòng này vì server bạn cần mật khẩu
+        script: |
+          cd ~/github/k8s-demo
+          sed -i 's|image: .*|image: ${{ secrets.DOCKERHUB_USERNAME }}/my-backend-app:${{ github.sha }}|g' hello-app.yaml
+          kubectl apply -f hello-app.yaml
