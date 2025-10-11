@@ -44,6 +44,14 @@ jobs:
     needs: build
 
     steps:
+        # Bước được tối ưu hóa bằng cache
+    - name: Cache cloudflared deb package
+      id: cache-cloudflared
+      uses: actions/cache@v4
+      with:
+        path: cloudflared.deb
+        key: ${{ runner.os }}-cloudflared-latest
+        
     - name: Install cloudflared
       run: |
         if [[ "${{ steps.cache-cloudflared.outputs.cache-hit }}" != 'true' ]]; then
