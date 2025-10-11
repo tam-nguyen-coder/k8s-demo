@@ -45,9 +45,14 @@ jobs:
 
     steps:
     - name: Install cloudflared
-      uses: cloudflare/cloudflared-action@latest
-      with:
-        version: 'latest' # Hoặc một phiên bản cụ thể như '2024.9.1'
+      run: |
+        if [[ "${{ steps.cache-cloudflared.outputs.cache-hit }}" != 'true' ]]; then
+          echo "Cache miss. Downloading cloudflared..."
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+        else
+          echo "Cache hit. Using cached cloudflared."
+        fi
+        sudo dpkg -i cloudflared.deb
 
     - name: Create cloudflared certificate
       run: |
