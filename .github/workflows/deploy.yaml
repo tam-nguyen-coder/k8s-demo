@@ -1,59 +1,65 @@
-name: Super Detailed SSH Debug
+name: Deploy to Kubernetes
 
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  debug-ssh-super-detailed:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # Bước 1: Lấy code
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # Bước 2: Cài đặt Cloudflared
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/my-backend-app:${{ github.sha }}
+
     - name: Install cloudflared
       run: |
         curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
         sudo dpkg -i cloudflared.deb
 
-    # Bước 3: Tạo file xác thực cloudflared
     - name: Create cloudflared certificate
       run: |
         mkdir -p ~/.cloudflared/
         echo "${{ secrets.CLOUDFLARE_CERT }}" > ~/.cloudflared/cert.pem
-
-    # Bước 4: Thiết lập SSH Key từ Secret
-    - name: Set up SSH Key
+        
+    - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
         echo "${{ secrets.K8S_PRIVATE_KEY }}" > ~/.ssh/id_rsa
         chmod 600 ~/.ssh/id_rsa
-
-    # Bước 5: Tạo file cấu hình SSH
-    - name: Create SSH config
-      run: |
         echo "Host ${{ secrets.K8S_HOST }}" > ~/.ssh/config
         echo "  ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h" >> ~/.ssh/config
         echo "  User ${{ secrets.K8S_USER }}" >> ~/.ssh/config
         echo "  IdentityFile ~/.ssh/id_rsa" >> ~/.ssh/config
         echo "  StrictHostKeyChecking no" >> ~/.ssh/config
         echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
-        # Thêm các tùy chọn debug và tăng timeout
-        echo "  LogLevel DEBUG3" >> ~/.ssh/config
-        echo "  ServerAliveInterval 60" >> ~/.ssh/config
-        echo "  ConnectTimeout 30" >> ~/.ssh/config
-        
-    # Bước 6: Kiểm tra các file
-    - name: Verify Created Files
+
+    - name: Deploy to Kubernetes
       run: |
-        echo "--- Verifying SSH config file ---"
-        cat ~/.ssh/config
-        
-    # Bước 7: Chạy SSH với chế độ debug chi tiết nhất
-    - name: Test SSH Connection with Max Verbose Output
-      run: |
-        # Lệnh ssh với -vvv để xem mọi chi tiết
-        ssh -vvv ${{ secrets.K8S_HOST }} "echo 'Connection successful!'"
+        ssh ${{ secrets.K8S_HOST }} << 'ENDSSH'
+          # Các lệnh dưới đây sẽ được chạy trên server của bạn
+          echo "--- Connected to server, starting deployment ---"
+          cd ~/github/k8s-demo
+          echo "--- Updating image tag in deployment YAML ---"
+          sed -i 's|image: .*|image: ${{ secrets.DOCKERHUB_USERNAME }}/my-backend-app:${{ github.sha }}|g' hello-app.yaml
+          echo "--- Applying new configuration to Kubernetes ---"
+          kubectl apply -f hello-app.yaml
+          echo "--- Deployment successful! ---"
+        ENDSSH
