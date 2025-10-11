@@ -16,7 +16,7 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     # === BƯỚC MỚI ĐỂ CACHE NPM PACKAGES ===
     - name: Cache npm dependencies
       id: cache-npm
@@ -49,6 +49,10 @@ jobs:
         push: true
         # Tag image bằng username và một mã hash duy nhất (digest)
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/my-backend-app:latest
+        # Thêm 'cache-from' và 'cache-to' để tối ưu cả quá trình build image
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
 
   # === JOB 2: DEPLOY IMAGE ===
   deploy:
