@@ -6,27 +6,34 @@ on:
 
 jobs:
   # === JOB 1: BUILD IMAGE ===
+  # This job handles building and pushing the Docker image to Docker Hub
+  # It runs on a fresh Ubuntu virtual machine for each workflow execution
   build:
     runs-on: ubuntu-latest
     outputs:
-      # 'outputs' cho phép chúng ta gửi thông tin từ job này sang job khác
-      # Chúng ta sẽ gửi đi image tag duy nhất đã được build
+      # 'outputs' allows us to pass information from this job to other jobs
+      # We're sending the unique image digest (hash) that was built
+      # This digest will be used in the deploy job to ensure we're deploying the exact image that was just built
       image_tag: ${{ steps.build_and_push_image.outputs.digest }}
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # === BƯỚC MỚI ĐỂ CACHE NPM PACKAGES ===
+    # === STEP: CACHE NPM PACKAGES FOR FASTER BUILDS ===
+    # This step significantly speeds up the Docker build process by caching npm packages
+    # Without this, npm install would run every time, downloading packages from scratch
     - name: Cache npm dependencies
       id: cache-npm
       uses: actions/cache@v4
       with:
-        # Đường dẫn đến thư mục cache của npm
+        # Path to npm's cache directory on the runner
         path: ~/.npm
-        # Key để định danh cache. Nó sẽ thay đổi nếu file package-lock.json thay đổi
+        # Cache key that changes when package-lock.json changes
+        # This ensures we get a fresh cache when dependencies are updated
         key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
-        # Khôi phục cache ngay cả khi key không khớp hoàn toàn
+        # Fallback cache keys for partial matches (e.g., if only package.json changed)
+        # This provides some benefit even when we can't use the exact cache
         restore-keys: |
           ${{ runner.os }}-npm-
 
@@ -40,78 +47,113 @@ jobs:
       uses: docker/setup-buildx-action@v3
 
     - name: Build and push Docker image
-      # Đặt một 'id' cho bước này để có thể tham chiếu đến 'outputs' của nó
+      # Assign an 'id' to this step so we can reference its 'outputs' in other steps
+      # This allows us to capture the image digest for use in the deploy job
       id: build_and_push_image
       uses: docker/build-push-action@v5
       with:
+        # Build context - the current directory containing Dockerfile and source code
         context: .
+        # Target platform for the Docker image (AMD64 architecture)
         platforms: linux/amd64
+        # Automatically push the image to the registry after building
         push: true
-        # Tag image bằng username và một mã hash duy nhất (digest)
+        # Tag the image with Docker Hub username and repository name
+        # The 'latest' tag always points to the most recent build
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/my-backend-app:latest
-        # Thêm 'cache-from' và 'cache-to' để tối ưu cả quá trình build image
+        # Enable GitHub Actions cache for Docker layers to speed up subsequent builds
+        # 'cache-from' retrieves cached layers from previous builds
+        # 'cache-to' saves layers for future builds, 'mode=max' stores all intermediate layers
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
 
-  # === JOB 2: DEPLOY IMAGE ===
+  # === JOB 2: DEPLOY IMAGE TO KUBERNETES ===
+  # This job deploys the Docker image built in the previous job to a Kubernetes cluster
+  # It only runs if the build job completed successfully
   deploy:
     runs-on: ubuntu-latest
-    # 'needs: build' đảm bảo job này chỉ chạy KHI VÀ CHỈ KHI job 'build' thành công
+    # 'needs: build' ensures this job only runs WHEN AND ONLY WHEN the 'build' job succeeds
+    # This creates a dependency chain: build → deploy
     needs: build
 
     steps:
-    # === BƯỚC MỚI ĐỂ TỐI ƯU ===
+    # === STEP: OPTIMIZE SYSTEM FOR FASTER PACKAGE INSTALLATION ===
+    # This step reduces the size of installed packages by excluding documentation
+    # This speeds up the installation of cloudflared and reduces disk usage
     - name: Optimize Dpkg (Skip Docs and Man Pages)
       run: |
+        # Configure dpkg to exclude documentation files during package installation
+        # This reduces package size and installation time
         echo "path-exclude /usr/share/doc/*" | sudo tee /etc/dpkg/dpkg.cfg.d/01_nodoc
         echo "path-exclude /usr/share/man/*" | sudo tee -a /etc/dpkg/dpkg.cfg.d/01_nodoc
         
-    # Bước được tối ưu hóa bằng cache
+    # === STEP: CACHE CLOUDFLARED PACKAGE FOR FASTER DEPLOYMENT ===
+    # This step caches the cloudflared binary to avoid downloading it on every run
+    # Cloudflared is needed to establish secure tunnel to the Kubernetes cluster
     - name: Cache cloudflared deb package
       id: cache-cloudflared
       uses: actions/cache@v4
       with:
+        # Path where the downloaded package will be stored
         path: cloudflared.deb
+        # Cache key that identifies this specific version of cloudflared
         key: ${{ runner.os }}-cloudflared-latest
         
     - name: Install cloudflared
       run: |
+        # Check if we have a cached version of cloudflared
         if [[ "${{ steps.cache-cloudflared.outputs.cache-hit }}" != 'true' ]]; then
           echo "Cache miss. Downloading cloudflared..."
+          # Download the latest cloudflared binary for Linux AMD64
           curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
         else
           echo "Cache hit. Using cached cloudflared."
         fi
+        # Install the cloudflared package using dpkg
         sudo dpkg -i cloudflared.deb
 
     - name: Create cloudflared certificate
       run: |
+        # Create the cloudflared configuration directory
         mkdir -p ~/.cloudflared/
+        # Write the Cloudflare tunnel certificate to the expected location
+        # This certificate is needed to authenticate with Cloudflare's network
         echo "${{ secrets.CLOUDFLARE_CERT }}" > ~/.cloudflared/cert.pem
         
-    - name: Setup SSH
+    - name: Setup SSH connection through Cloudflare tunnel
       run: |
+        # Create SSH directory and set up secure connection to Kubernetes cluster
         mkdir -p ~/.ssh
+        # Store the private SSH key for authentication
         echo "${{ secrets.K8S_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+        # Set restrictive permissions on the private key (only owner can read/write)
         chmod 600 ~/.ssh/id_rsa
+        # Configure SSH to use Cloudflare tunnel as a proxy
         echo "Host ${{ secrets.K8S_HOST }}" > ~/.ssh/config
+        # Use cloudflared to establish the SSH connection through Cloudflare's network
         echo "  ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h" >> ~/.ssh/config
         echo "  User ${{ secrets.K8S_USER }}" >> ~/.ssh/config
         echo "  IdentityFile ~/.ssh/id_rsa" >> ~/.ssh/config
+        # Disable host key checking for automated deployment (less secure but necessary for CI/CD)
         echo "  StrictHostKeyChecking no" >> ~/.ssh/config
         echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
 
-    - name: Deploy to Kubernetes
+    - name: Deploy to Kubernetes cluster
       run: |
+        # Establish SSH connection to the Kubernetes cluster and execute deployment commands
         ssh ${{ secrets.K8S_HOST }} << 'ENDSSH'
-          # Lệnh dưới đây sẽ được chạy trên server của bạn
+          # Commands below will be executed on your Kubernetes server
           echo "--- Connected to server, starting deployment ---"
+          # Navigate to the project directory on the server
           cd ~/github/k8s-demo
           echo "--- Updating image tag in deployment YAML ---"
-          # Sử dụng image tag nhận được từ job 'build'
+          # Use the image digest received from the 'build' job to update the deployment
+          # This ensures we're deploying the exact image that was just built and pushed
           sed -i 's|image: .*|image: ${{ secrets.DOCKERHUB_USERNAME }}/my-backend-app@${{ needs.build.outputs.image_tag }}|g' hello-app.yaml
           echo "--- Applying new configuration to Kubernetes ---"
+          # Apply the updated Kubernetes configuration to the cluster
+          # This will trigger a rolling update of the application pods
           kubectl apply -f hello-app.yaml
           echo "--- Deployment successful! ---"
         ENDSSH
