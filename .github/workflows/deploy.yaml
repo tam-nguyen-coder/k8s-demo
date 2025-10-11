@@ -1,11 +1,11 @@
-name: Advanced SSH Debug
+name: Deep Cloudflared Debug
 
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  debug-ssh-connection:
+  debug-cloudflared-connection:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,38 +24,16 @@ jobs:
       run: |
         mkdir -p ~/.cloudflared/
         echo "${{ secrets.CLOUDFLARE_CERT }}" > ~/.cloudflared/cert.pem
-
-    # Bước 4: Thiết lập SSH Key từ Secret
-    - name: Set up SSH Key
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.K8S_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-
-    # Bước 5: Tạo file cấu hình SSH
-    - name: Create SSH config
-      run: |
-        echo "Host ${{ secrets.K8S_HOST }}" > ~/.ssh/config
-        echo "  ProxyCommand /usr/local/bin/cloudflared access ssh --hostname %h" >> ~/.ssh/config
-        echo "  User ${{ secrets.K8S_USER }}" >> ~/.ssh/config
-        echo "  IdentityFile ~/.ssh/id_rsa" >> ~/.ssh/config
-        echo "  StrictHostKeyChecking no" >> ~/.ssh/config
-        echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
-
-    # Bước 6: Kiểm tra các file đã được tạo đúng chưa
-    - name: Verify Created Files
+        
+    # Bước 4: Kiểm tra file cert
+    - name: Verify Certificate File
       run: |
         echo "--- Verifying cloudflared certificate file ---"
         ls -la ~/.cloudflared/
-        echo ""
-        echo "--- Verifying SSH key file ---"
-        ls -la ~/.ssh/
-        echo ""
-        echo "--- Verifying SSH config file ---"
-        cat ~/.ssh/config
+        head -n 2 ~/.cloudflared/cert.pem 
         
-    # Bước 7: Chạy SSH với chế độ debug chi tiết nhất
-    - name: Test SSH Connection with Max Verbose Output
+    # Bước 5: Chạy cloudflared với chế độ debug
+    - name: Test cloudflared connection directly with debug logs
       run: |
-        # Lệnh ssh với -vvv để xem mọi chi tiết
-        ssh -vvv ${{ secrets.K8S_HOST }} "echo 'Connection successful!'"
+        # Chạy lệnh cloudflared với loglevel debug để xem chi tiết quá trình handshake
+        /usr/local/bin/cloudflared --loglevel debug access ssh --hostname ${{ secrets.K8S_HOST }}
