@@ -14,14 +14,18 @@ spec:
     spec:
       containers:
       - name: web-server
-        image: tamnguyencoder/my-backend-app:v3
+        image: tamnguyencoder/my-backend-app:latest
         ports:
         - containerPort: 3000
+        env:
+          - name: POSTGRES_HOST
+            value: postgres-service
         envFrom:
         - configMapRef:
             name: app-config # Lấy tất cả key từ ConfigMap 'app-config'
+        # Get POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB from secret
         - secretRef:
-            name: app-secret # Lấy tất cả key từ Secret 'app-secret'
+            name: postgres-secret # get all keys from Secret 'postgres-secret'
 ---
 apiVersion: v1
 kind: Service
