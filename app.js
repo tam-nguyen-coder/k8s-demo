@@ -25,10 +25,7 @@ app.get('/', (req, res) => {
     hostname: req.hostname,
     podName: process.env.HOSTNAME,
     // Trả về cấu hình đã đọc được
-    config: {
-      apiUrl: apiUrl,
-      apiKey: apiKey
-    }
+    ...(process.env ?? {})
   });
 });
 
