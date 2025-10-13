@@ -1,21 +1,20 @@
+require('dotenv').config();
 const express = require('express');
-const { Pool } = require('pg'); // Import thư viện pg
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = 3000;
 
-// Đọc cấu hình từ biến môi trường
-const apiUrl = process.env.API_URL || 'No API URL set';
-const apiKey = process.env.API_KEY || 'No API Key set';
+// Middleware to parse JSON request bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// --- CẤU HÌNH KẾT NỐI DATABASE ---
-// Đọc thông tin kết nối từ các biến môi trường do Kubernetes cung cấp
 const dbPool = new Pool({
   user: process.env.POSTGRES_USER,
   host: process.env.POSTGRES_HOST,
   database: process.env.POSTGRES_DB,
   password: process.env.POSTGRES_PASSWORD,
-  port: 5432,
+  port: process.env.POSTGRES_PORT || 5432,
 });
 
 
@@ -44,21 +43,21 @@ app.get('/messages', async (req, res) => {
 
 // POST MESSAGE
 app.post('/messages', async (req, res) => {
-  const { message } = req.body;
+  const { content } = req.body;
   const client = await dbPool.connect();
-  const result = await client.query('INSERT INTO messages (message) VALUES ($1)', [message]);
+  const result = await client.query('INSERT INTO messages (content) VALUES ($1)', [content]);
   client.release();
-  res.json(result.rows);
+  res.send(!!result.rowCount)
 });
 
 // UPDATE MESSAGE
 app.put('/messages/:id', async (req, res) => {
   const { id } = req.params;
-  const { message } = req.body;
+  const { content } = req.body;
   const client = await dbPool.connect();
-  const result = await client.query('UPDATE messages SET message = $1 WHERE id = $2', [message, id]);
+  const result = await client.query('UPDATE messages SET content = $1 WHERE id = $2', [content, id]);
   client.release();
-  res.json(result.rows);
+  res.send(!!result.rowCount);
 });
 
 // GET MESSAGE BY ID
@@ -76,7 +75,7 @@ app.delete('/messages/:id', async (req, res) => {
   const client = await dbPool.connect();
   const result = await client.query('DELETE FROM messages WHERE id = $1', [id]);
   client.release();
-  res.json(result.rows);
+  res.send(!!result.rowCount);
 });
 
 
