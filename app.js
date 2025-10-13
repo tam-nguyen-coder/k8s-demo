@@ -30,6 +30,7 @@ app.get('/', (req, res) => {
 
 // INSEERT NEW MESSAGE TO DATABASE
 app.get('/messages', async (req, res) => {
+  console.log('GET MESSAGES');
   try {
     const client = await dbPool.connect();
     const result = await client.query('SELECT * FROM messages');
@@ -43,6 +44,7 @@ app.get('/messages', async (req, res) => {
 
 // POST MESSAGE
 app.post('/messages', async (req, res) => {
+  console.log('POST MESSAGE', req.body);
   try {
     const { content } = req.body;
     const client = await dbPool.connect();
@@ -57,6 +59,7 @@ app.post('/messages', async (req, res) => {
 
 // UPDATE MESSAGE
 app.put('/messages/:id', async (req, res) => {
+  console.log('UPDATE MESSAGE', req.params);
   try {
     const { id } = req.params;
     const { content } = req.body;
@@ -72,6 +75,7 @@ app.put('/messages/:id', async (req, res) => {
 
 // GET MESSAGE BY ID
 app.get('/messages/:id', async (req, res) => {
+  console.log('GET MESSAGE BY ID', req.params);
   try {
     const { id } = req.params;
     const client = await dbPool.connect();
@@ -90,6 +94,7 @@ app.get('/messages/:id', async (req, res) => {
 
 // DELETE MESSAGE
 app.delete('/messages/:id', async (req, res) => {
+  console.log('DELETE MESSAGE', req.params);
   try {
     const { id } = req.params;
     const client = await dbPool.connect();
