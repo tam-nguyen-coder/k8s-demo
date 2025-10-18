@@ -1,21 +1,20 @@
+require('dotenv').config();
 const express = require('express');
-const { Pool } = require('pg'); // Import thư viện pg
+const { Pool } = require('pg');
 
 const app = express();
 const PORT = 3000;
 
-// Đọc cấu hình từ biến môi trường
-const apiUrl = process.env.API_URL || 'No API URL set';
-const apiKey = process.env.API_KEY || 'No API Key set';
+// Middleware to parse JSON request bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// --- CẤU HÌNH KẾT NỐI DATABASE ---
-// Đọc thông tin kết nối từ các biến môi trường do Kubernetes cung cấp
 const dbPool = new Pool({
   user: process.env.POSTGRES_USER,
   host: process.env.POSTGRES_HOST,
   database: process.env.POSTGRES_DB,
   password: process.env.POSTGRES_PASSWORD,
-  port: 5432,
+  port: process.env.POSTGRES_PORT || 5432,
 });
 
 
@@ -37,10 +36,11 @@ app.get('/', (req, res) => {
 
 // INSEERT NEW MESSAGE TO DATABASE
 app.get('/messages', async (req, res) => {
+  console.log('GET MESSAGES');
   try {
     const client = await dbPool.connect();
     const result = await client.query('SELECT * FROM messages');
-    client.release(); // Trả kết nối về pool
+    client.release(); 
     res.json(result.rows);
   } catch (err) {
     console.error('Error executing query', err.stack);
@@ -50,39 +50,67 @@ app.get('/messages', async (req, res) => {
 
 // POST MESSAGE
 app.post('/messages', async (req, res) => {
-  const { message } = req.body;
-  const client = await dbPool.connect();
-  const result = await client.query('INSERT INTO messages (message) VALUES ($1)', [message]);
-  client.release();
-  res.json(result.rows);
+  console.log('POST MESSAGE', req.body);
+  try {
+    const { content } = req.body;
+    const client = await dbPool.connect();
+    const result = await client.query('INSERT INTO messages (content) VALUES ($1)', [content]);
+    client.release();
+    res.send(!!result.rowCount)
+  } catch (error) {
+    console.error('Error executing query', error.stack);
+    res.status(500).json({ error: 'Failed to insert message into database' });
+  }
 });
 
 // UPDATE MESSAGE
 app.put('/messages/:id', async (req, res) => {
-  const { id } = req.params;
-  const { message } = req.body;
-  const client = await dbPool.connect();
-  const result = await client.query('UPDATE messages SET message = $1 WHERE id = $2', [message, id]);
-  client.release();
-  res.json(result.rows);
+  console.log('UPDATE MESSAGE', req.params);
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+    const client = await dbPool.connect();
+    const result = await client.query('UPDATE messages SET content = $1 WHERE id = $2', [content, id]);
+    client.release();
+    res.send(!!result.rowCount);
+  } catch (error) {
+    console.error('Error executing query', error.stack);
+    res.status(500).json({ error: 'Failed to update message in database' });
+  }
 });
 
 // GET MESSAGE BY ID
 app.get('/messages/:id', async (req, res) => {
-  const { id } = req.params;
-  const client = await dbPool.connect();
-  const result = await client.query('SELECT * FROM messages WHERE id = $1', [id]);
-  client.release();
-  res.json(result.rows);
+  console.log('GET MESSAGE BY ID', req.params);
+  try {
+    const { id } = req.params;
+    const client = await dbPool.connect();
+    const result = await client.query('SELECT * FROM messages WHERE id = $1', [id]);
+    client.release();
+    if(!result.rows.length) {
+      res.status(404).json({ error: 'Message not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error executing query', error.stack);
+    res.status(500).json({ error: 'Failed to get message from database' });
+  }
+
 });
 
 // DELETE MESSAGE
 app.delete('/messages/:id', async (req, res) => {
-  const { id } = req.params;
-  const client = await dbPool.connect();
-  const result = await client.query('DELETE FROM messages WHERE id = $1', [id]);
-  client.release();
-  res.json(result.rows);
+  console.log('DELETE MESSAGE', req.params);
+  try {
+    const { id } = req.params;
+    const client = await dbPool.connect();
+    const result = await client.query('DELETE FROM messages WHERE id = $1', [id]);
+    client.release();
+    res.send(!!result.rowCount);
+  } catch (error) {
+    console.error('Error executing query', error.stack);
+    res.status(500).json({ error: 'Failed to delete message from database' });
+  }
 });
 
 
