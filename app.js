@@ -19,6 +19,12 @@ const dbPool = new Pool({
 });
 
 
+// Heath check endpoint
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+
 app.get('/', (req, res) => {
   res.json({
     message: "Hello from my CI/CD pipeline V3!",
